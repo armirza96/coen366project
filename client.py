@@ -9,23 +9,30 @@ BUFFER_SIZE = 4096
 IP = socket.gethostbyname(socket.gethostname())
 PORT = 8080  
 ADDR = (IP, PORT)
-FORMAT = "utf-8"
 SIZE = 1024
 
 def send_file(filename):
     filepath = f"{UPLOAD_FOLDER}/{filename}"
     filesize = os.path.getsize(filepath)
     
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    
+    
+    client = socket.socket()
     client.connect(ADDR)
 
-    client.send(f"{filename}{SEPARATOR}{filesize}".encode())
+    send_data = f"{filename}{SEPARATOR}{filesize}".encode('utf-8')
+    
+    print(f"{filepath} {filesize} {send_data}")
+    
+    client.send(send_data)
     
     with open(filepath, "rb") as f:
-        bytes_read = f.read(BUFFER_SIZE)
-        while bytes_read:
+        while True:
             # read the bytes from the file
             bytes_read = f.read(BUFFER_SIZE)
+            if not bytes_read:
+                # file transmitting is done
+                break
             client.sendall(bytes_read)
     client.close()
 
@@ -51,6 +58,7 @@ def do_command(command):
 if __name__ == "__main__":
     userInput = 0
     print("Before starting, please ensure the files you would like to interact with are in the associated folders. ")
+    
     while userInput != "exit":
         print("1. Upload file. Ex: put filename.extension ")
         print("2. Get file. Ex: get filename.extension ")
@@ -63,4 +71,6 @@ if __name__ == "__main__":
         print(f"User inputted: {userInput}")
         
         do_command(userInput)
+        
+        print(" ")
     print("Exiting client")

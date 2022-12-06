@@ -1,7 +1,7 @@
 import socket
 import os
 # device's IP address
-IP = socket.gethostbyname(socket.gethostname())
+IP = "0.0.0.0" 
 PORT = 8080
 # receive 4096 bytes each time
 BUFFER_SIZE = 4096
@@ -22,23 +22,28 @@ if __name__ == "__main__":
     
     # receive the file infos
     # receive using client socket, not server socket
-    received = client_socket.recv(BUFFER_SIZE).decode()
+    received = client_socket.recv(BUFFER_SIZE).decode('utf-8')
     filename, filesize = received.split(SEPARATOR)
    
     # remove absolute path if there is
-    filename = f"{UPLOAD_FOLDER_DESTINATION}/{filename}"
+    filepath = f"{UPLOAD_FOLDER_DESTINATION}/{filename}"
     # convert to integer
+    print(f"{filepath} {filesize}")
     filesize = int(filesize)
-    print(f"{filename} {filesize}")
     
-    with open(filename, "wb") as f:
-        bytes_read = client_socket.recv(BUFFER_SIZE)
-        while bytes_read:
+    print(f"{filepath} {filesize}")
+    
+    with open(filepath, "wb") as f:
+        while True:
             # read 1024 bytes from the socket (receive)
             bytes_read = client_socket.recv(BUFFER_SIZE)
+            if not bytes_read:    
+                # nothing is received
+                # file transmitting is done
+                break
             f.write(bytes_read)
 
-        # close the client socket
-        client_socket.close()
-        # close the server socket
-        s.close()
+    # close the client socket
+    client_socket.close()
+    # close the server socket
+    s.close()
