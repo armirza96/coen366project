@@ -1,5 +1,6 @@
 import socket
 import os
+import sys
 
 UPLOAD_FOLDER = "to_upload"
 
@@ -9,21 +10,18 @@ BUFFER_SIZE = 4096
 IP = socket.gethostbyname(socket.gethostname())
 PORT = 8080  
 ADDR = (IP, PORT)
-SIZE = 1024
 
 def send_file(filename):
     filepath = f"{UPLOAD_FOLDER}/{filename}"
     filesize = os.path.getsize(filepath)
-    
-    
-    
+
     client = socket.socket()
     client.connect(ADDR)
 
     send_data = f"{filename}{SEPARATOR}{filesize}".encode('utf-8')
     
     print(f"{filepath} {filesize} {send_data}")
-    
+    print(sys.getsizeof(send_data))
     client.send(send_data)
     
     with open(filepath, "rb") as f:
@@ -33,7 +31,8 @@ def send_file(filename):
             if not bytes_read:
                 # file transmitting is done
                 break
-            client.sendall(bytes_read)
+            else:
+                client.sendall(bytes_read) #(f"{SEPARATOR}{bytes_read}".encode('utf-8')) #
     client.close()
 
 
