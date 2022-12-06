@@ -1,7 +1,10 @@
 import socket
+import os
 
 UPLOAD_FOLDER = "to_upload"
-UPLOAD_FOLDER_DESTINATION = "uploads"
+
+SEPARATOR = "<SEPERATOR>"
+BUFFER_SIZE = 4096
 
 IP = socket.gethostbyname(socket.gethostname())
 PORT = 8080  
@@ -9,27 +12,21 @@ ADDR = (IP, PORT)
 FORMAT = "utf-8"
 SIZE = 1024
 
-def open_connection(command):
+def send_file(filename):
+    filepath = f"{UPLOAD_FOLDER}/{filename}"
+    filesize = os.path.getsize(filepath)
+    
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect(ADDR)
- 
-    file = open("data/yt.txt", "r")
-    data = file.read()
- 
-    """ Sending the filename to the server. """
-    client.send("yt.txt".encode(FORMAT))
-    msg = client.recv(SIZE).decode(FORMAT)
-    print(f"[SERVER]: {msg}")
- 
-    """ Sending the file data to the server. """
-    client.send(data.encode(FORMAT))
-    msg = client.recv(SIZE).decode(FORMAT)
-    print(f"[SERVER]: {msg}")
- 
-    """ Closing the file. """
-    file.close()
- 
-    """ Closing the connection from the server. """
+
+    client.send(f"{filename}{SEPARATOR}{filesize}".encode())
+    
+    with open(filepath, "rb") as f:
+        bytes_read = f.read(BUFFER_SIZE)
+        while bytes_read:
+            # read the bytes from the file
+            bytes_read = f.read(BUFFER_SIZE)
+            client.sendall(bytes_read)
     client.close()
 
 
@@ -37,20 +34,24 @@ def do_command(command):
     vals = command.split(" ")
     cmd = vals[0]
     
-    match cmd:
-        case 1:
-            filename = vals[1]
-            
-        case 2:
-        case 3:
-        case 4:
-        case _:
-            print("unsupported command")
-if __name__ == "__main__":
+    if cmd == "put":
+        filename = vals[1]
+        send_file(filename)
+    elif cmd == "get":
+        filename = vals[1]
+    elif cmd == "change":
+        oldFileName = vals[1]
+        newFileName = vals[2]
+        
+    elif cmd == "help":
+        print("Getting help")
+    else:
+        print("unsupported command")
     
+if __name__ == "__main__":
     userInput = 0
     print("Before starting, please ensure the files you would like to interact with are in the associated folders. ")
-    while userInput != "5":
+    while userInput != "exit":
         print("1. Upload file. Ex: put filename.extension ")
         print("2. Get file. Ex: get filename.extension ")
         print("3. change filename. Ex: change oldfilename newfilename")
