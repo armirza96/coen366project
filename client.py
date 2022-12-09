@@ -9,7 +9,7 @@ BUFFER_SIZE = 4096
 
 IP = socket.gethostbyname(socket.gethostname())
 PORT = 8080  
-ADDR = (IP, PORT)
+
 
 def send_file(filename):
     filepath = f"{UPLOAD_FOLDER}/{filename}"
@@ -33,6 +33,11 @@ def send_file(filename):
                 break
             else:
                 client.sendall(bytes_read) #(f"{SEPARATOR}{bytes_read}".encode('utf-8')) #
+    
+    print("Receiving Response")    
+    response = client.recv(1024)
+    print(f"RECIEVED RESPONSE: {response}")
+        
     client.close()
 
 
@@ -55,7 +60,17 @@ def do_command(command):
         print("unsupported command")
     
 if __name__ == "__main__":
+    if 3 < len(sys.argv): # will be 3 < 4 as script_name IP PORT DEBUG gives a lenght of 4
+        IP = int(sys.argv[1])
+        PORT = bool(sys.argv[2])
+        DEBUG = bool(sys.argv[3])
+    else:
+        print("Assuming default values for ip, port and debug")
+    
+    ADDR = (IP, PORT)
+    
     userInput = 0
+    print(" ")
     print("Before starting, please ensure the files you would like to interact with are in the associated folders. ")
     
     while userInput != "exit":
