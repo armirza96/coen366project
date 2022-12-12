@@ -31,11 +31,11 @@ def send_file(client, filename) -> str:
     amtOfBitsSentForFileName = client.send(filename.encode("utf-8"))
     amtOfBitsSentForFileSize = client.send(filesize.to_bytes(4, 'little'))
     
-    print(f"AMount of bytes sent {amtOfBitsSentForFileInfo} {amtOfBitsSentForFileName} {amtOfBitsSentForFileSize}")
+    print(f"Amount of bytes sent {amtOfBitsSentForFileInfo} {amtOfBitsSentForFileName} {amtOfBitsSentForFileSize}")
     
     with open(filepath, "rb") as f:
         while True:
-            # read the bytes from the file
+            # read the bytes from the file1
             bytes_read = f.read(BUFFER_SIZE)
             if not bytes_read:
                 # file transmitting is done
@@ -95,7 +95,7 @@ def change_file_name(oldfilename, newfilename) -> str:
     amtOfBitsSentForOldFileNameLength = client.send(bytes([int(newfileNameBits, 2)]))
     amtOfBitsSentForNewFileName = client.send(newfilename.encode("utf-8"))
     
-    print(f"AMount of bytes sent {amtOfBitsSentForFileInfo} {amtOfBitsSentForFileName} {amtOfBitsSentForOldFileNameLength} {amtOfBitsSentForNewFileName}")
+    print(f"Amount of bytes sent {amtOfBitsSentForFileInfo} {amtOfBitsSentForFileName} {amtOfBitsSentForOldFileNameLength} {amtOfBitsSentForNewFileName}")
     
     print("Receiving Response")    
     response = client.recv(1) # doesnt work
@@ -114,7 +114,7 @@ def get_help(client) -> str:
 
     amtOfBitsSent = client.send(bytes([int(send_data, 2)]))
 
-    print(f"AMount of bytes sent {amtOfBitsSent}")
+    print(f"Amount of bytes sent {amtOfBitsSent}")
     
     print("Receiving Response")    
     response = client.recv(1) 
@@ -159,7 +159,7 @@ def work_with_response(client, response):
     rescode = byteInfo >> 0b101
     
     if rescode == 0:
-        print("Operation completed successfull1")
+        print("Operation completed successfully")
     elif rescode == 1:
         filenameSize = byteInfo & 0b00011111
         receivedFileName = client.recv(filenameSize).decode('utf-8') # will read n bytes in for filename
