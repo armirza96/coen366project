@@ -3,26 +3,35 @@ import os
 import sys
 
 UPLOAD_FOLDER = "to_upload"
+DOWNLOAD_FOLDER_DESTINATION = "downloads"
 
-SEPARATOR = "<SEPERATOR>"
 BUFFER_SIZE = 4096
 
 IP = socket.gethostbyname(socket.gethostname())
 PORT = 8080  
 
-
-def send_file(filename):
+def send_file(client, filename) -> str:
     filepath = f"{UPLOAD_FOLDER}/{filename}"
     filesize = os.path.getsize(filepath)
+    opcode = '{:03b}'.format(0)#'0b000'#'{0:03b}'.format(0)
+    # opcode1 = '{:03b}'.format(1)#'0b000'#'{0:03b}'.format(0)
+    # opcode2 = '{:03b}'.format(2)#'0b000'#'{0:03b}'.format(0)
+    # opcode3 = '{:03b}'.format(3)#'0b000'#'{0:03b}'.format(0)
+    #fileNameLength = format(5, (len(filename)))
+    fileNameBits = '{:05b}'.format(len(filename))
 
-    client = socket.socket()
-    client.connect(ADDR)
 
-    send_data = f"{filename}{SEPARATOR}{filesize}".encode('utf-8')
+    send_data = opcode + fileNameBits
+
+    print(f"{opcode} {fileNameBits} {filesize} {filesize.to_bytes(4, 'little')}")
+
+    print(f"BITS in sent data : {send_data}")
+
+    amtOfBitsSentForFileInfo = client.send(bytes([int(send_data, 2)]))
+    amtOfBitsSentForFileName = client.send(filename.encode("utf-8"))
+    amtOfBitsSentForFileSize = client.send(filesize.to_bytes(4, 'little'))
     
-    print(f"{filepath} {filesize} {send_data}")
-    print(sys.getsizeof(send_data))
-    client.send(send_data)
+    print(f"AMount of bytes sent {amtOfBitsSentForFileInfo} {amtOfBitsSentForFileName} {amtOfBitsSentForFileSize}")
     
     with open(filepath, "rb") as f:
         while True:
@@ -32,32 +41,139 @@ def send_file(filename):
                 # file transmitting is done
                 break
             else:
-                client.sendall(bytes_read) #(f"{SEPARATOR}{bytes_read}".encode('utf-8')) #
+                client.send(bytes_read)
+   
+    response = client.recv(1)
+
+    return response
+
+def get_file(filename) -> str:
+    filepath = f"{DOWNLOAD_FOLDER_DESTINATION}/{filename}"
+    opcode = '{:03b}'.format(1)
+
+    fileNameBits = '{:05b}'.format(len(filename))
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client.connect(ADDR)
+
+    send_data = opcode + fileNameBits
+
+    print(f"{opcode} {fileNameBits}")
+
+    amtOfBitsSentForFileInfo = client.send(bytes([int(send_data, 2)]))
+    amtOfBitsSentForFileName = client.send(filename.encode("utf-8"))
+    
+    print(f"AMount of bytes sent {amtOfBitsSentForFileInfo} {amtOfBitsSentForFileName}")
+    
+    with open(filepath, "wb") as f:
+        while True:
+            bytes_read = client.recv(BUFFER_SIZE)
+            print(bytes_read)
+            if not bytes_read:    
+                break
+            f.write(bytes_read)
     
     print("Receiving Response")    
-    response = client.recv(1024)
-    print(f"RECIEVED RESPONSE: {response}")
-        
-    client.close()
+    response = client.recv(1) # doesnt work
+    
+    return response
 
+def change_file_name(oldfilename, newfilename) -> str:
+    opcode = '{:03b}'.format(2)
+
+    oldfileNameBits = '{:05b}'.format(len(oldfilename))
+    newfileNameBits = '{:08b}'.format(len(newfilename))
+    client = socket.socket()
+    client.connect(ADDR)
+
+    send_data = opcode + oldfileNameBits
+
+    print(f"{opcode} {oldfileNameBits}")
+
+    amtOfBitsSentForFileInfo = client.send(bytes([int(send_data, 2)]))
+    amtOfBitsSentForFileName = client.send(oldfilename.encode("utf-8"))
+    
+    amtOfBitsSentForOldFileNameLength = client.send(bytes([int(newfileNameBits, 2)]))
+    amtOfBitsSentForNewFileName = client.send(newfilename.encode("utf-8"))
+    
+    print(f"AMount of bytes sent {amtOfBitsSentForFileInfo} {amtOfBitsSentForFileName} {amtOfBitsSentForOldFileNameLength} {amtOfBitsSentForNewFileName}")
+    
+    print("Receiving Response")    
+    response = client.recv(1) # doesnt work
+    
+    return response
+
+def get_help(client) -> str:
+    opcode = '{:03b}'.format(3)
+    padding = '{:05b}'.format(0)
+    client = socket.socket()
+    client.connect(ADDR)
+
+    send_data = opcode + padding
+
+    print(f"{send_data}")
+
+    amtOfBitsSent = client.send(bytes([int(send_data, 2)]))
+
+    print(f"AMount of bytes sent {amtOfBitsSent}")
+    
+    print("Receiving Response")    
+    response = client.recv(1) 
+
+    return response
 
 def do_command(command):
     vals = command.split(" ")
     cmd = vals[0]
     
+    client = socket.socket()
+    client.connect(ADDR)
+    
+    response = ""
     if cmd == "put":
         filename = vals[1]
-        send_file(filename)
+        response = send_file(client, filename)
     elif cmd == "get":
         filename = vals[1]
+        
+        response = get_file(client, filename)
     elif cmd == "change":
         oldFileName = vals[1]
         newFileName = vals[2]
         
+        response = change_file_name(client, oldFileName, newFileName)
     elif cmd == "help":
-        print("Getting help")
+        response = get_help(client)  
     else:
         print("unsupported command")
+    
+    print(response)
+    
+    work_with_response(client, response)
+    
+    client.close()
+    
+def work_with_response(client, response):
+    byteInfo = int.from_bytes(response, sys.byteorder)
+    #filename, filesize = received.split(SEPARATOR)
+    print(f"RECEIVED: {response}")
+    rescode = byteInfo >> 0b101
+    
+    if rescode == 0:
+        print("Operation completed successfull1")
+    elif rescode == 1:
+        filenameSize = byteInfo & 0b00011111
+        receivedFileName = client.recv(filenameSize).decode('utf-8') # will read n bytes in for filename
+        fileNameBits = '{:05b}'.format(len(receivedFileName))
+        
+        response = get_file(client, receivedFileName)
+    elif rescode == 2:
+       print("Error: File not found")
+    elif rescode == 3:
+        print("Error: Unknown request")
+    elif rescode == 4:
+        print("Error: Unsuccessful change")
+    else:
+        response = '{:03b}'.format(3)
     
 if __name__ == "__main__":
     if 3 < len(sys.argv): # will be 3 < 4 as script_name IP PORT DEBUG gives a lenght of 4
