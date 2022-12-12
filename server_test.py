@@ -1,17 +1,306 @@
-##
-# @file server.py
-#
-# @brief TCP Server logic and algorithm
-#
-#
-# @section author_doxygen_example Author(s)
-# - Created by Kevin de Oliveira on 04/01/2022.
-# - Student ID: 40054907
-#
-# Copyright (c) 2022 Kevin de Oliveira.  All rights reserved.
+####################################### PART 1: Command Line #####################################################
+import sys
+from typing import List, Tuple
 
+class commands:
+
+    def __init__(self, **kwargs) -> None:
+       
+        self.argv : list = []
+        self.argn : int = 0
+
+        if kwargs.__len__ == 0 :
+            return
+
+    def get_args(self, args : List[str] or None = None) -> Tuple[list, int]:
+        
+        if args is None or args.__len__ <= 1 :
+            self.argv = sys.argv[1:]
+            self.argn = len(sys.argv)
+            return (self.argv, self.argn)
+
+        self.argv = args[1:]
+        self.argn = len(args)
+
+        return (self.argv, self.argn)
+
+    def parameters(self, format : List[str] or None = None) -> dict:
+       
+        temp = {}
+
+        for i,x in enumerate(self.argv):
+    
+            if format and x in format and i < self.argn - 1:
+                    temp.update({
+                        x: self.argv[i + 1]
+                    })
+            else:
+                sys.exit("unknown option: "+x+"\n")
+        
+        return temp
+
+########################################### PART 2: ENCODING THE COMMANDS  ########################################
+
+import enum
+from typing import List
+
+class MessageType(enum.Enum):
+   
+    REQUEST = 0
+    RESPONSE = 1
+
+class MethodType(enum.Enum):
+    def get_format(self) -> List[int]:
+        pass
+    
+
+class RequestType(MethodType):
+
+    PUT = "000"
+    GET = "001"
+    CHANGE = "010"
+    HELP = "011"
+
+    def get_format(self):
+       
+        if self == RequestType.PUT:
+            return [5, 32 * 8, 4 * 8]
+        elif self == RequestType.GET:
+            return [5, 32*8]
+        elif self == RequestType.CHANGE:
+            return [5, 32 * 8, 8, 32 * 8]
+        elif self == RequestType.HELP :
+            return [5]
+        else:
+            return []
+
+class ResponseType(MethodType):
+    OK_PUT_CHANGE = "000"
+    OK_GET = "001"
+    ERROR_NOT_FOUND = "010"
+    ERROR_UNKNOWN = "011"
+    ERROR_NO_CHANGE = "101"
+    HELP = "110"
+
+    def get_format(self):
+        if self == ResponseType.OK_PUT_CHANGE:
+            return [5]
+        elif self == ResponseType.OK_GET:
+            return [5, 32*8, 4*8]
+        elif self == ResponseType.ERROR_NOT_FOUND:
+            return [5]
+        elif self == ResponseType.ERROR_UNKNOWN:
+            return [5]
+        elif self == ResponseType.ERROR_NO_CHANGE:
+            return [5]
+        elif self == ResponseType.HELP :
+            return [5, 32 * 8]
+        else:
+            return []
+
+####################################### PART 3: CONVERTING STRING INPUT TO BINARY ENCODING ###########################################
+import math
+from typing import List, Tuple
+import bitarray
+from bitarray import util
+from packet import packet
+
+class Message:
+    def __init__(self, header_size : int, type: MethodType) -> None:
+       
+        self.header = packet(header_size)
+        
+        self.data : list[packet] = []
+        self.type : MethodType = type
+
+        self.header(self.type.value)
+
+        self.size = header_size
+
+        self.payload : packet or None = None
+
+
+
+        self._token(
+            self.type.get_format()
+        )
+        
+    
+    def _token(self, format : List[int]):
+      
+        if len(format) == 0:
+            return None
+
+        
+        for x in format:
+            self.data.append(
+                packet(x)
+            )
+        
+        self.size += sum(format)
+        
+
+    def parse(self, value : str) -> Tuple[packet, List[packet]] or None:
+    
+        if(value.__len__ == 0 or len(value) > self.size):
+            return None
+                       
+        if not len(self.data):
+            return None
+
+        ind = 0
+        
+        for i, x in enumerate(self.data):
+            x(value[ind :  ind + x.size ])            
+            ind += x.size
+
+
+        return (self.header, self.data)
+
+    def add_payload(self, value : str or bytes, encode : str = "utf-8" or "bytes") -> None:
+     
+        temp = bitarray.util.hex2ba( value.hex() ).to01()
+
+        self.payload = packet(len(temp))
+        self.payload(temp)
+
+    def has_payload(self) -> bool:
+        
+        return self.payload is not None
+
+    
+
+    def __repr__(self) -> str:
+        temp = "["+ self.header.__str__() +"]"
+        for x in self.data:
+            temp += x.__str__()
+        return  temp
+        
+    def __str__(self) -> str:
+        temp = "["+ self.header.__str__() +"]"
+        for x in self.data:
+            temp += x.__str__()
+        return  temp
+
+
+class Util:
+
+    @staticmethod
+    def serialize(msg : Message) -> bytes:
+     
+        binary : bitarray.bitarray = bitarray.bitarray(endian="big")
+        
+        binary.extend(
+            msg.header.body
+        )
+
+
+        for x in msg.data:
+            binary.extend(
+                x.body
+            )
+        
+        if msg.has_payload():
+            binary.extend(
+                msg.payload.body
+            )
+
+
+        return util.serialize(binary)
+
+
+    @staticmethod
+    def deserialize(binary : bytes, type : MessageType) -> Message:
+       
+        temp : bitarray.bitarray = util.deserialize(binary)
+        
+        if type == MessageType.REQUEST:
+            msg = Message(3, RequestType(temp.to01()[:3]))
+
+            if msg.type == RequestType.PUT:
+                msg.parse(
+                    temp.to01()[3:msg.size]
+                )
+                pk = packet(len(temp.to01()[msg.size:]))
+                pk(temp.to01()[msg.size:])
+                msg.payload = pk
+            else:
+                
+                msg.parse(
+                    temp.to01()[3:]
+                )
+
+            return msg
+
+        elif type == MessageType.RESPONSE:
+            msg = Message(3, ResponseType(temp.to01()[:3]))
+            if msg.type == ResponseType.OK_GET:
+                msg.parse(
+                    temp.to01()[3:msg.size]
+                )
+                pk = packet(len(temp.to01()[msg.size:]))
+                pk(temp.to01()[msg.size:])
+                msg.payload = pk
+
+            else:
+                msg.parse(
+                    temp.to01()[3:]
+                )
+        
+            return msg
+        
+        else:
+            raise ValueError("Incorrect Message type")
+        
+
+
+
+    @staticmethod
+    def str2bit(val : str, size : int, with_count : bool = True, size_count : int or None = None ) -> str:
+      
+        val = val.strip()
+
+        data : str = util.hex2ba( val.encode("utf-8").hex() ).to01()
+
+        if(len(data) > size): raise ValueError("Value passed is too big")
+
+
+        if(len(data) < size):
+            for _ in range(0, size - len(data)):
+                data = "0" + data
+
+
+        if with_count:
+            count : int = util.int2ba(len(val)).to01()
+            
+            if size_count:
+                count_size = size_count
+            else:
+                count_size = int( math.log2( int(size / 8) ) ) 
+
+            if(len(count) < count_size):
+                for _ in range(0, count_size - len(count)):
+                    count = "0" + count
+
+            return count + data
+        else:
+            return data
+    @staticmethod
+    def bit2byte(msg : Message) -> List[bytes]:
+        temp : list[bytes] = []
+        for x in msg.data:
+            temp.append(
+                x.body.tobytes()
+            )
+        if msg.has_payload():
+            temp.append(
+                msg.payload.body.tobytes()
+            )
+
+        return temp
+
+##################################### PART 4: SETTING UP SERVER TCP ###################################    
 from ast import arg
-import pickle
 import socket as sok
 import sys
 from threading import Thread
@@ -19,24 +308,12 @@ from types import FunctionType
 from typing import Any, Callable, List, Tuple
 from bitarray import util
 
-from interpreter.message import Message, Util
-from interpreter.message_type import MessageType, RequestType, ResponseType
-
-
 class TcpServer():
     _DEFAULT_PORT = 1025
     _MAX_BUFFER = 65574
 
     def __init__(self, ip_addr, **kwargs) -> None:
-        """!
-        TCP Server interface that creates a new socket given the ip address provided for FTP communication purposes
-
-        @param ip_addr: str     IP address which the TCP service would be listening to
-        @param -p: int          Port value which socket will bind its connection
-        @param -a: str          IP address that TCP service will be using
-
-        @return TcpServer
-        """
+    
         self._debug = False
         self.thread = None
         self.socket = sok.socket(sok.AF_INET, sok.SOCK_STREAM)
@@ -55,19 +332,11 @@ class TcpServer():
         self.is_connected = False
 
     def _init_app(self) -> str:
-        """!
-        Initial message printed into command-line when TCP service is initiated
-        """
-        return """-- FTP Server initializing on {ip}:{port}
--- Version 1.0.0 by Kevin de Oliveira
--- README contains a list of available commands and some concepts guiding""".format(ip = self.ip_address, port = self._DEFAULT_PORT)
+    
+        return """-- FTP Server initializing on {ip}:{port}""".format(ip = self.ip_address, port = self._DEFAULT_PORT)
 
     def listen(self):
-        """!
-        Starts a new threded TCP service by connecting to the respective server.
-
-        @return None
-        """
+       
         self.socket.listen()
         print(self._init_app())
         if self._debug:
@@ -79,9 +348,6 @@ class TcpServer():
                 self.is_connected = True
                 self.thread.start()
 
-                # For non concurrent connection, join current thread so loop awaits for any active connection to be terminated before connecting any other socket
-                # if self.thread:
-                #     self.thread.join()
             except KeyboardInterrupt:
                     print("Closing server")
                     self.is_connected = False
@@ -94,18 +360,11 @@ class TcpServer():
         
 
     def handle_listen(self, conn : sok.socket, addr : sok.AddressInfo):
-        """!
-        Internal function that is responsible for parsing any incoming and outgoing message sent to the TCP socket
-        
-        @return None
-        """
+       
         print("""> New connection {addr}:{port}""".format(addr = addr[0], port=addr[1]))
 
         while self.is_connected:
-            try:
-                # Socket is only able to receive MAX_BUFFER;
-                # Therefore, ensure that maximum packet sent is no longer then _MAX_BUFFER or set socket to nonblocking -> socket.setblocking(False)
-                # Otherwise, wait for any possible subsequent packet receival (parallel or different loop)                
+            try:              
                 data = conn.recv(self._MAX_BUFFER)
                 if not data:
                     print("Closing connection with:", addr)
@@ -134,40 +393,22 @@ class TcpServer():
             
 
     def on_receive(self, *args : Callable[[sok.AddressInfo, Message], bytes]):
-        """!
-        Attach a callback that is called when a message is received
-
-        @param *args: List[Callable[[sok.AddressInfo, Message], bytes]] List of callable objects containing its Method type and respective callback function
-        """
+       
         for x in args:
             self.recv_functions.append(x)
 
     @staticmethod
     def parse_packet(data : bytes) -> Message:
-        """!
-        Deserializes incoming byte received by the TCP socket
-
-        @param data: bytes  Byte object received by socket
-
-        @return Message: object
-        """
+    
         return Util.deserialize(data, MessageType.REQUEST)
 
-    
-
-
+############################ PART 5: CREATING TCP CLIENT ###############################
 import os
 from re import S
 from socket import socket
-
 import bitarray
-from interpreter import arguments
-from interpreter.message_type import MessageType, RequestType, ResponseType
-from interpreter.message import Message, Util
 
 server_dir = "server"
-
-
 BASE_DIR = os.getcwd() + os.sep + "dir" + os.sep + server_dir + os.sep
 
 
@@ -200,11 +441,9 @@ def response_error_no_change():
 
 def response_ok_help():
     message = Message(3, ResponseType.HELP)
-    val = Util.str2bit("get put change bye",ResponseType.HELP.get_format()[1])
+    val = Util.str2bit("bye change get help put",ResponseType.HELP.get_format()[1])
     message.parse(val)
     return Util.serialize(message)
-
-
 
 def on_receive_put(addr, data : Message) -> bytes:
     
@@ -218,8 +457,7 @@ def on_receive_put(addr, data : Message) -> bytes:
 
     except Exception as e:
         print(e)
-        # @brief Although no response type is defined for PUT errors in the project description, excpetions may still occur if server has not enough privilege for accessing file or f.write fails.
-        # Sending an ERROR_NO_CHANGE response in case the above issue happends
+
         return response_error_no_change()
 
     return response_ok()
@@ -230,11 +468,7 @@ def on_receive_get(addr, data : Message) -> bytes:
     result = Util.bit2byte(data)
 
     file_name = BASE_DIR + result[1].decode("utf-8")
-
-    # @brief Remove embedded null pointer coming from raw data
     file_name = file_name.replace(chr(0), "")
-
-    
 
     try:
         with open(file_name, "rb") as open_file:
@@ -268,20 +502,9 @@ def on_receive_help(addr, data : Message) -> bytes:
     return response_ok_help()
 
 
-
-
-arg_helper = """usage: tcp_server [-a address] [-p port] [-f base_folder] [-F absolute_folder] [-v | --version] [-h | --help | -?]
-
-This are the commands used:
-\t-d\t\t Activate debug mode
-\t-a address\t\t Set address of this server (default: 127.0.0.1)
-\t-p port\t\t\t Set port number of this server (default: 1025)
-\t-f base_folder\t\t Set relative base path of the FTP server (default: /dir/server)
-\t-F absolute_folder\t Set absolute base path of the FTP server (default: $pwd)"""
-
 if __name__ == "__main__":
 
-    cmd = arguments.ParserArgs(helper = arg_helper, version="tcp_server version 1.0")
+    cmd = commands(version="tcp_server version 1.0")
 
     cmd.get_args()
 
@@ -292,7 +515,7 @@ if __name__ == "__main__":
     elif "-F" in params:
         BASE_DIR = params["-F"]
     
-    tcp_server = TcpServer("127.0.0.1", **params)
+    tcp_server = TcpServer("0.0.0.0", **params)
 
     
 
